@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>⭐ MellisApp</title>
+
+  <!-- PWA-bas -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0b1220">
+  <!-- iOS PWA (standalone) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MellisApp">
+  <!-- (Valfritt) Lägg till en riktig PNG-ikon senare: -->
+  <!-- <link rel="apple-touch-icon" href="assets/icon-192.png"> -->
+
+  <style>
+    :root{
+      --bg:#0b1220;--panel:#111a2b;--panel-2:#0f1729;--text:#e6edf6;--muted:#9fb0c3;
+      --accent:#3b82f6;--accent-2:#22c55e;--warn:#eab308;--danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+         background:var(--bg);color:var(--text)}
+    header{position:sticky;top:0;background:linear-gradient(180deg,var(--panel),rgba(17,26,43,.7));
+           backdrop-filter:blur(6px);z-index:10;border-bottom:1px solid rgba(255,255,255,.06)}
+    .container{max-width:1100px;margin:0 auto;padding:16px}
+    h1{font-size:20px;margin:0 0 8px 0}
+    .toolbar{display:grid;grid-template-columns:1fr;gap:8px}
+    @media(min-width:720px){.toolbar{grid-template-columns:1fr auto auto auto auto}}
+    input[type="text"], input[type="number"]{width:100%;padding:10px 12px;border-radius:10px;
+      border:1px solid rgba(255,255,255,.12);background:var(--panel-2);color:var(--text)}
+    input::placeholder{color:var(--muted)}
+    button{appearance:none;border:1px solid rgba(255,255,255,.12);background:var(--panel-2);
+      color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    button.primary{background:var(--accent);border-color:transparent;color:white}
+    button.success{background:var(--accent-2);border-color:transparent;color:white}
+    button.warn{background:var(--warn);border-color:transparent;color:black}
+    button.danger{background:var(--danger);border-color:transparent;color:white}
+    button.ghost{background:transparent;border-color:rgba(255,255,255,.18)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .members{display:grid;grid-template-columns:repeat(1, minmax(0,1fr));gap:10px;margin-top:12px}
+    @media(min-width:600px){.members{grid-template-columns:repeat(2, minmax(0,1fr))}}
+    @media(min-width:980px){.members{grid-template-columns:repeat(3, minmax(0,1fr))}}
+    .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .title{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .name{font-weight:700}
+    .meta{font-size:12px;color:var(--muted)}
+    .balance{font-weight:800}
+    .low{color:var(--warn)}
+    .zero{color:var(--danger)}
+    .btnbar{display:flex;gap:8px;flex-wrap:wrap}
+    .badges{display:flex;gap:6px;flex-wrap:wrap}
+    .badge{font-size:11px;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);color:var(--muted)}
+    .panel{margin-top:12px;padding:12px;background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border-radius:16px;border:1px solid rgba(255,255,255,.08)}
+    .footer{color:var(--muted);font-size:12px;margin-top:12px}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);
+      border-radius:999px;background:rgba(255,255,255,.04)}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>⭐ MellisApp</h1>
+      <div class="toolbar">
+        <input id="search" type="text" placeholder="Sök elev/medlem… (skriv för att filtrera)" />
+        <button id="addQuick" class="success">+ Lägg till medlem (12 mellis)</button>
+        <button id="minusQuick" title="Dra 1 mellis på vald" class="warn">−1 Snabbdrag</button>
+        <button id="exportBtn" class="ghost">📤 Exportera backup</button>
+        <label class="pill">📥 Importera <input id="importFile" type="file" accept="application/json" /></label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="pill"><label>Antal per kupong: <input id="perCoupon" type="number" min="1" value="12" style="width:90px;margin-left:6px"></label></div>
+        <div class="pill"><label><input id="lowOnly" type="checkbox"/> Visa bara låg saldo (≤2)</label></div>
+        <div class="pill">Totalt medlemmar: <span id="countMembers">0</span></div>
+        <div class="pill">Mellis kvar totalt: <span id="countTotal">0</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="panel">
+      <div class="row">
+        <input id="newName" type="text" placeholder="Namn (t.ex. Anna Svensson)" />
+        <input id="newClass" type="text" placeholder="Klass/Årskurs (valfritt)" />
+        <button id="createBtn" class="primary">Skapa medlem + kupong</button>
+      </div>
+      <div class="footer">
+        Tips: Tryck <b>Enter</b> i namn-fältet för att snabbt lägga till.
+        Sökfältet filtrerar direkt, tryck <b>Enter</b> när endast en syns för att dra 1 mellis.
+      </div>
+    </div>
+
+    <section id="members" class="members" aria-live="polite"></section>
+
+    <details class="panel">
+      <summary>📘 Hjälp & info</summary>
+      <ul>
+        <li><b>Offline:</b> All data sparas lokalt i webbläsarens minne (LocalStorage). Exportera gärna en backupfil då och då.</li>
+        <li><b>Lägg till kupong:</b> Klicka “+12” (eller ändra antalet per kupong i toppen).</li>
+        <li><b>Dra mellis:</b> Klicka “−1”. Du kan också söka fram eleven och trycka Enter.</li>
+        <li><b>Ångra:</b> Använd knappen Ångra på kortet om du klickat fel nyss.</li>
+        <li><b>Låg saldo:</b> Markeras gult (≤2). Filtrera med bocken i toppen.</li>
+        <li><b>Export/Import:</b> Spara/återläs JSON-fil för backup eller flytt till annan enhet.</li>
+      </ul>
+    </details>
+
+    <p class="footer">MellisApp ⭐ — helt lokal lagring. Ingen elevdata laddas upp någonstans.</p>
+  </main>
+
+  <script>
+    // --- PWA: registrera service worker om det stöds ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+      });
+    }
+
+    // --- LocalStorage-nycklar (namnrymder) ---
+    const KEY_DB = 'mellis:db';
+    const KEY_SETTINGS = 'mellis:settings';
+    const defaultSettings = { perCoupon: 12 };
+
+    function loadJSON(key, fallback){
+      try{ return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; }
+      catch{ return fallback; }
+    }
+    function saveJSON(key, val){
+      localStorage.setItem(key, JSON.stringify(val));
+    }
+
+    // Ladda tillstånd
+    let settings = { ...defaultSettings, ...loadJSON(KEY_SETTINGS, {}) };
+    let db = loadJSON(KEY_DB, { members: [] });
+
+    // Hjälp
+    function uid(){ return 'm_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36) }
+    function escapeHtml(s){ return (s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])) }
+
+    // Datamanipulation
+    function addMember(name, klass){
+      const member = { id: uid(), name: name.trim(), class: (klass||'').trim(), balance: settings.perCoupon, history: [ { type:'init', change: settings.perCoupon, ts: Date.now() } ] };
+      db.members.push(member);
+      saveJSON(KEY_DB, db);
+      return member;
+    }
+    function changeBalance(id, delta){
+      const m = db.members.find(x=>x.id===id); if(!m) return;
+      const before = m.balance;
+      m.balance = Math.max(0, m.balance + delta);
+      m.history = m.history || [];
+      m.history.push({ type: delta>0?'add':'sub', change: delta, ts: Date.now(), before });
+      saveJSON(KEY_DB, db);
+      return m;
+    }
+    function undoLast(id){
+      const m = db.members.find(x=>x.id===id); if(!m || !m.history || m.history.length===0) return;
+      const last = m.history.pop();
+      if(typeof last.before === 'number'){ m.balance = last.before; }
+      else { m.balance = Math.max(0, m.balance - (last.change||0)); }
+      saveJSON(KEY_DB, db);
+      return m;
+    }
+    function removeMember(id){
+      db.members = db.members.filter(x=>x.id!==id);
+      saveJSON(KEY_DB, db);
+    }
+
+    // UI-element
+    const membersEl = document.getElementById('members');
+    const searchEl = document.getElementById('search');
+    const newNameEl = document.getElementById('newName');
+    const newClassEl = document.getElementById('newClass');
+    const createBtn = document.getElementById('createBtn');
+    const addQuickBtn = document.getElementById('addQuick');
+    const minusQuickBtn = document.getElementById('minusQuick');
+    const perCouponEl = document.getElementById('perCoupon');
+    const lowOnlyEl = document.getElementById('lowOnly');
+    const countMembersEl = document.getElementById('countMembers');
+    const countTotalEl = document.getElementById('countTotal');
+    const exportBtn = document.getElementById('exportBtn');
+    const importFileEl = document.getElementById('importFile');
+
+    perCouponEl.value = settings.perCoupon;
+
+    function render(){
+      const q = (searchEl.value||'').toLowerCase().trim();
+      const lowOnly = lowOnlyEl.checked;
+
+      const list = [...db.members]
+        .sort((a,b)=> a.name.localeCompare(b.name,'sv'))
+        .filter(m=> {
+          const hit = m.name.toLowerCase().includes(q) || (m.class||'').toLowerCase().includes(q);
+          const low = m.balance <= 2;
+          return hit && (!lowOnly || low);
+        });
+
+      membersEl.innerHTML = '';
+      list.forEach(m=>{
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="title">
+            <div>
+              <div class="name">${escapeHtml(m.name)}</div>
+              <div class="meta">${m.class?`Klass: ${escapeHtml(m.class)}`:'&nbsp;'}</div>
+            </div>
+            <div class="balance ${m.balance===0?'zero':(m.balance<=2?'low':'')}">${m.balance}</div>
+          </div>
+          <div class="btnbar">
+            <button data-act="minus" data-id="${m.id}" class="warn">−1 mellis</button>
+            <button data-act="plus" data-id="${m.id}" class="success">+${settings.perCoupon}</button>
+            <button data-act="undo" data-id="${m.id}" class="ghost">Ångra</button>
+            <button data-act="edit" data-id="${m.id}" class="ghost">Redigera</button>
+            <button data-act="delete" data-id="${m.id}" class="danger" title="Ta bort medlem">Ta bort</button>
+          </div>
+          <div class="badges">
+            ${m.balance===0?'<span class="badge">Slut på mellis</span>':''}
+            ${m.balance<=2 && m.balance>0?'<span class="badge">Låg saldo</span>':''}
+          </div>
+        `;
+        membersEl.appendChild(card);
+      });
+      countMembersEl.textContent = db.members.length;
+      countTotalEl.textContent = db.members.reduce((s,x)=>s+x.balance,0);
+
+      // Delegation
+      membersEl.querySelectorAll('button[data-act]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const id = btn.getAttribute('data-id');
+          const act = btn.getAttribute('data-act');
+          if(act==='minus'){ changeBalance(id, -1); render(); searchEl.focus(); }
+          if(act==='plus'){ changeBalance(id, settings.perCoupon); render(); }
+          if(act==='undo'){ undoLast(id); render(); }
+          if(act==='delete'){ if(confirm('Ta bort medlem? Detta går inte att ångra.')){ removeMember(id); render(); } }
+          if(act==='edit'){
+            const m = db.members.find(x=>x.id===id); if(!m) return;
+            const newName = prompt('Ändra namn:', m.name)??m.name;
+            const newClass = prompt('Ändra klass/årskurs (valfritt):', m.class||'')??m.class;
+            m.name = newName.trim();
+            m.class = (newClass||'').trim();
+            saveJSON(KEY_DB, db);
+            render();
+          }
+        });
+      });
+
+      // Snabbdrag om exakt en träff
+      if(list.length===1) {
+        minusQuickBtn.disabled = false;
+        minusQuickBtn.onclick = ()=>{ changeBalance(list[0].id, -1); render(); searchEl.focus(); };
+      } else {
+        minusQuickBtn.disabled = true;
+        minusQuickBtn.onclick = null;
+      }
+    }
+
+    // Sök
+    searchEl.addEventListener('input', render);
+    searchEl.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){
+        const q = (searchEl.value||'').toLowerCase().trim();
+        const list = db.members
+          .filter(m=> m.name.toLowerCase().includes(q) || (m.class||'').toLowerCase().includes(q))
+          .sort((a,b)=> a.name.localeCompare(b.name,'sv'));
+        if(list.length===1){ changeBalance(list[0].id, -1); render(); }
+      }
+    });
+
+    // Ny medlem
+    newNameEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ createBtn.click(); } });
+    createBtn.addEventListener('click', ()=>{
+      const name = newNameEl.value.trim(); if(!name){ newNameEl.focus(); return; }
+      const klass = newClassEl.value.trim();
+      const m = addMember(name, klass);
+      newNameEl.value=''; newClassEl.value='';
+      render();
+      searchEl.value = m.name; render(); searchEl.focus();
+    });
+
+    // Snabb "lägg till" via prompt
+    addQuickBtn.addEventListener('click', ()=>{
+      const name = (prompt('Namn på ny medlem:')||'').trim(); if(!name) return;
+      const klass = (prompt('Klass/Årskurs (valfritt):')||'').trim();
+      addMember(name, klass); render();
+    });
+
+    // Inställning
+    perCouponEl.addEventListener('change', ()=>{
+      const v = Math.max(1, Number(perCouponEl.value)||12);
+      settings.perCoupon = v; saveJSON(KEY_SETTINGS, settings);
+      render();
+    });
+
+    // Filter
+    lowOnlyEl.addEventListener('change', render);
+
+    // Export/Import
+    exportBtn.addEventListener('click', ()=>{
+      const payload = { exportedAt: new Date().toISOString(), settings, db, app: 'MellisApp' };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'mellis-backup.json'; a.click();
+      setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    });
+
+    importFileEl.addEventListener('change', async (e)=>{
+      const file = e.target.files && e.target.files[0]; if(!file) return;
+      try{
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        if(!payload || !payload.db || !Array.isArray(payload.db.members)) throw new Error('Felaktig fil');
+        if(confirm('Vill du ersätta nuvarande data med filens innehåll?')){
+          db = payload.db; settings = { ...defaultSettings, ...(payload.settings||{}) };
+          saveJSON(KEY_DB, db); saveJSON(KEY_SETTINGS, settings);
+          render(); alert('Import klar!');
+        }
+      }catch(err){ alert('Kunde inte importera: '+(err.message||err)); }
+      finally{ e.target.value=''; }
+    });
+
+    // Init
+    render();
+  </script>
+</body>
+</html>
