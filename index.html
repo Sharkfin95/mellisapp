@@ -7,8 +7,6 @@
 
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0b1220">
-
-  <!-- iOS -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="MellisApp">
@@ -16,7 +14,7 @@
   <style>
     :root{
       --bg:#0b1220;--panel:#111a2b;--panel-2:#0f1729;--text:#e6edf6;--muted:#9fb0c3;
-      --accent:#3b82f6;--accent-2:#22c55e;--warn:#eab308;--danger:#ef4444;
+      --accent:#3b82f6;--accent-2:#22c55e;--warn:#eab308;--danger:#ef4444;--overlay:rgba(0,0,0,.6);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -27,8 +25,8 @@
     .container{max-width:1100px;margin:0 auto;padding:16px}
     h1{font-size:20px;margin:0 0 8px 0}
     .toolbar{display:grid;grid-template-columns:1fr;gap:8px}
-    @media(min-width:720px){.toolbar{grid-template-columns:1fr auto auto auto auto}}
-    input[type="text"], input[type="number"]{width:100%;padding:10px 12px;border-radius:10px;
+    @media(min-width:960px){.toolbar{grid-template-columns:1fr auto auto auto auto auto}}
+    input[type="text"], input[type="number"], select{width:100%;padding:10px 12px;border-radius:10px;
       border:1px solid rgba(255,255,255,.12);background:var(--panel-2);color:var(--text)}
     input::placeholder{color:var(--muted)}
     button{appearance:none;border:1px solid rgba(255,255,255,.12);background:var(--panel-2);
@@ -55,12 +53,25 @@
     .badges{display:flex;gap:6px;flex-wrap:wrap}
     .badge{font-size:11px;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.12);color:var(--muted)}
+    .badge-red{background:rgba(239,68,68,.15);color:#fecaca;border-color:rgba(239,68,68,.5)}
+
     .panel{margin-top:12px;padding:12px;background:linear-gradient(180deg,var(--panel),var(--panel-2));
       border-radius:16px;border:1px solid rgba(255,255,255,.08)}
     .footer{color:var(--muted);font-size:12px;margin-top:12px}
     .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);
       border-radius:999px;background:rgba(255,255,255,.04)}
-    .hidden{display:none}
+
+    /* Statistik-modal */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--overlay);z-index:50}
+    .modal.open{display:flex}
+    .modal-card{width:min(680px,92vw);background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px}
+    .grid{display:grid;gap:10px}
+    .grid.cols-2{grid-template-columns:1fr 1fr}
+    .stat{padding:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px}
+    .stat .h{font-size:12px;color:var(--muted)}
+    .stat .v{font-size:18px;font-weight:800}
+
   </style>
 </head>
 <body>
@@ -68,19 +79,18 @@
     <div class="container">
       <h1>⭐ MellisApp</h1>
       <div class="toolbar">
-        <input id="search" type="text" placeholder="Sök elev..." />
+        <input id="search" type="text" placeholder="Sök elev eller klass…" />
+        <select id="classFilter"><option value="">Alla klasser</option></select>
         <button id="addQuick" class="success">+ Lägg till medlem (12 mellis)</button>
         <button id="minusQuick" class="warn">−1 Snabbdrag</button>
+        <button id="statsBtn" class="ghost">📊 Statistik</button>
         <button id="exportBtn" class="ghost">📤 Exportera</button>
         <label class="pill">📥 Importera <input id="importFile" type="file" accept="application/json" /></label>
       </div>
       <div class="row" style="margin-top:8px">
         <div class="pill"><label>Antal per kupong: <input id="perCoupon" type="number" min="1" value="12" style="width:90px;margin-left:6px"></label></div>
         <div class="pill"><label><input id="lowOnly" type="checkbox"/> Visa bara låg saldo (≤2)</label></div>
-
-        <!-- GÖMD -->
         <div class="pill" style="display:none">Mellis kvar totalt: <span id="countTotal">0</span></div>
-
         <div class="pill">Totalt medlemmar: <span id="countMembers">0</span></div>
       </div>
     </div>
@@ -89,275 +99,364 @@
   <main class="container">
     <div class="panel">
       <div class="row">
-        <input id="newName" type="text" placeholder="Namn..." />
-        <input id="newClass" type="text" placeholder="Klass (valfritt)" />
+        <input id="newName" type="text" placeholder="Namn (t.ex. Anna Svensson)" />
+        <input id="newClass" type="text" placeholder="Klass/Årskurs (valfritt)" />
         <button id="createBtn" class="primary">Skapa medlem + kupong</button>
       </div>
-      <div class="footer">Tryck Enter i namn-fältet för snabb tilläggning.</div>
+      <div class="footer">Tips: Tryck <b>Enter</b> i namn-fältet för att snabbt lägga till.</div>
     </div>
 
-    <section id="members" class="members"></section>
+    <section id="members" class="members" aria-live="polite"></section>
 
     <details class="panel">
       <summary>📘 Hjälp & info</summary>
       <ul>
-        <li>All data sparas lokalt i webbläsaren (LocalStorage).</li>
-        <li>Klicka “−1” för att dra mellis. Enter i sök fungerar också.</li>
-        <li>Låg saldo ≤2 markeras automatiskt.</li>
+        <li><b>Offline:</b> All data sparas lokalt i webbläsaren.</li>
+        <li><b>Lägg till kupong:</b> Klicka “+12”.</li>
+        <li><b>Dra mellis:</b> Klicka “−1” eller tryck Enter efter sökning.</li>
+        <li><b>Filter:</b> Använd klassfiltret för att snabbt hitta rätt grupp.</li>
       </ul>
     </details>
 
-    <p class="footer">MellisApp ⭐ — lagrar allt lokalt på enheten.</p>
+    <p class="footer">MellisApp ⭐ — helt lokal lagring.</p>
   </main>
 
-<script>
-/* -------------------------------------
-   PWA Service Worker
---------------------------------------*/
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
-  });
-}
-
-/* -------------------------------------
-   LocalStorage Helpers
---------------------------------------*/
-const KEY_DB = 'mellis:db';
-const KEY_SETTINGS = 'mellis:settings';
-
-function loadJSON(key, fallback){
-  try{ return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; }
-  catch{ return fallback; }
-}
-function saveJSON(key, val){
-  localStorage.setItem(key, JSON.stringify(val));
-}
-
-/* -------------------------------------
-   Init Data
---------------------------------------*/
-let settings = { perCoupon: 12, ...loadJSON(KEY_SETTINGS, {}) };
-let db = loadJSON(KEY_DB, { members: [] });
-
-function uid(){ return 'm_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36); }
-function escapeHtml(s){ return (s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
-
-/* -------------------------------------
-   Data functions
---------------------------------------*/
-function addMember(name, klass){
-  const m = {
-    id: uid(),
-    name: name.trim(),
-    class: (klass||'').trim(),
-    balance: settings.perCoupon,
-    comment: "",                      // <-- NYTT FÄLT
-    history: [{ type:'init', change: settings.perCoupon, ts: Date.now(), before: settings.perCoupon }]
-  };
-  db.members.push(m);
-  saveJSON(KEY_DB, db);
-  return m;
-}
-
-function changeBalance(id, delta){
-  const m = db.members.find(x=>x.id===id); if(!m) return;
-  const before = m.balance;
-  m.balance = Math.max(0, m.balance + delta);
-  m.history.push({ type: delta>0?'add':'sub', change: delta, ts: Date.now(), before });
-  saveJSON(KEY_DB, db);
-}
-
-function undoLast(id){
-  const m = db.members.find(x=>x.id===id); if(!m || m.history.length===0) return;
-  const last = m.history.pop();
-  m.balance = last.before;
-  saveJSON(KEY_DB, db);
-}
-
-function removeMember(id){
-  db.members = db.members.filter(x=>x.id!==id);
-  saveJSON(KEY_DB, db);
-}
-
-/* -------------------------------------
-   UI Elements
---------------------------------------*/
-const membersEl = document.getElementById('members');
-const searchEl = document.getElementById('search');
-const newNameEl = document.getElementById('newName');
-const newClassEl = document.getElementById('newClass');
-const createBtn = document.getElementById('createBtn');
-const addQuickBtn = document.getElementById('addQuick');
-const minusQuickBtn = document.getElementById('minusQuick');
-const perCouponEl = document.getElementById('perCoupon');
-const lowOnlyEl = document.getElementById('lowOnly');
-const countMembersEl = document.getElementById('countMembers');
-const countTotalEl = document.getElementById('countTotal');
-const exportBtn = document.getElementById('exportBtn');
-const importFileEl = document.getElementById('importFile');
-
-perCouponEl.value = settings.perCoupon;
-
-/* -------------------------------------
-   Render
---------------------------------------*/
-function render(){
-  const q = (searchEl.value||'').toLowerCase().trim();
-  const lowOnly = lowOnlyEl.checked;
-
-  const list = [...db.members]
-    .sort((a,b)=> a.name.localeCompare(b.name,'sv'))
-    .filter(m=>{
-      const hit = m.name.toLowerCase().includes(q) || (m.class||'').toLowerCase().includes(q);
-      const low = m.balance <= 2;
-      return hit && (!lowOnly || low);
-    });
-
-  membersEl.innerHTML = '';
-
-  list.forEach(m=>{
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <div class="title">
-        <div>
-          <div class="name">${escapeHtml(m.name)}</div>
-          <div class="meta">${m.class ? "Klass: " + escapeHtml(m.class) : ""}</div>
-          <div class="meta">${m.comment ? "Allergi: " + escapeHtml(m.comment) : ""}</div>
-        </div>
-        <div class="balance ${m.balance===0?'zero':(m.balance<=2?'low':'')}">${m.balance}</div>
+  <!-- Statistik-modal -->
+  <div id="statsModal" class="modal">
+    <div class="modal-card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2>📊 Statistik</h2>
+        <button id="statsClose" class="ghost">Stäng</button>
       </div>
-
-      <div class="btnbar">
-        <button data-act="minus" data-id="${m.id}" class="warn">−1</button>
-        <button data-act="plus" data-id="${m.id}" class="success">+${settings.perCoupon}</button>
-        <button data-act="comment" data-id="${m.id}" class="ghost">Kommentar</button>
-        <button data-act="undo" data-id="${m.id}" class="ghost">Ångra</button>
-        <button data-act="delete" data-id="${m.id}" class="danger">Ta bort</button>
+      <div class="grid cols-2" style="margin-top:10px">
+        <div class="stat"><div class="h">Totalt medlemmar</div><div class="v" id="sMembers">0</div></div>
+        <div class="stat"><div class="h">Mellis kvar totalt</div><div class="v" id="sTotal">0</div></div>
+        <div class="stat"><div class="h">Snittsaldo</div><div class="v" id="sAvg">0</div></div>
+        <div class="stat"><div class="h">Låg saldo (≤2)</div><div class="v" id="sLow">0</div></div>
+        <div class="stat"><div class="h">Slut på mellis (=0)</div><div class="v" id="sZero">0</div></div>
+        <div class="stat"><div class="h">Med allergi-notis</div><div class="v" id="sAllergy">0</div></div>
       </div>
-    `;
-    membersEl.appendChild(card);
-  });
+      <div style="margin-top:12px" class="stat">
+        <div class="h">Klasser</div>
+        <div id="sClasses" style="margin-top:6px;font-size:14px"></div>
+      </div>
+    </div>
+  </div>
 
-  countMembersEl.textContent = db.members.length;
-  countTotalEl.textContent = db.members.reduce((s,x)=>s+x.balance,0);
+  <script>
+    /* -------------------------------------
+       PWA registration
+    --------------------------------------*/
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+      });
+    }
 
-  // Snabbdrag (ingen fokus → inget tangentbord)
-  if(list.length === 1){
-    minusQuickBtn.disabled = false;
-    minusQuickBtn.onclick = ()=>{
-      changeBalance(list[0].id, -1);
-      render();
-    };
-  } else {
-    minusQuickBtn.disabled = true;
-    minusQuickBtn.onclick = null;
-  }
+    /* -------------------------------------
+       Storage helpers
+    --------------------------------------*/
+    const KEY_DB = 'mellis:db';
+    const KEY_SETTINGS = 'mellis:settings';
 
-  // Delegation
-  membersEl.querySelectorAll('button[data-act]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.getAttribute('data-id');
-      const act = btn.getAttribute('data-act');
+    function loadJSON(key, fallback){
+      try{ return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; }
+      catch{ return fallback; }
+    }
+    function saveJSON(key, val){
+      localStorage.setItem(key, JSON.stringify(val));
+    }
 
-      if(act==='minus'){ changeBalance(id, -1); render(); }
-      if(act==='plus'){ changeBalance(id, settings.perCoupon); render(); }
-      if(act==='undo'){ undoLast(id); render(); }
-      if(act==='delete'){
-        if(confirm('Ta bort medlem?')) removeMember(id);
-        render();
+    let settings = { perCoupon: 12, ...loadJSON(KEY_SETTINGS, {}) };
+    let db = loadJSON(KEY_DB, { members: [] });
+
+    function uid(){ return 'm_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36); }
+    function escapeHtml(s){ return (s||'').replace(/[&<>\"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+    function hasAllergy(comment){
+      return !!(comment && /allergi/i.test(comment));
+    }
+
+    /* -------------------------------------
+       Data functions
+    --------------------------------------*/
+    function addMember(name, klass){
+      const m = {
+        id: uid(),
+        name: name.trim(),
+        class: (klass||'').trim(),
+        balance: settings.perCoupon,
+        comment: "",
+        history: []
+      };
+      db.members.push(m);
+      saveJSON(KEY_DB, db);
+      return m;
+    }
+
+    function changeBalance(id, delta){
+      const m = db.members.find(x=>x.id===id); if(!m) return;
+      const before = m.balance;
+      m.balance = Math.max(0, m.balance + delta);
+      m.history.push({ before, change: delta, ts: Date.now() });
+      saveJSON(KEY_DB, db);
+    }
+
+    function undoLast(id){
+      const m = db.members.find(x=>x.id===id); if(!m || !m.history.length) return;
+      const last = m.history.pop();
+      m.balance = last.before;
+      saveJSON(KEY_DB, db);
+    }
+
+    function removeMember(id){
+      db.members = db.members.filter(m=>m.id!==id);
+      saveJSON(KEY_DB, db);
+    }
+
+    /* -------------------------------------
+       UI Elements
+    --------------------------------------*/
+    const membersEl = document.getElementById("members");
+    const searchEl = document.getElementById("search");
+    const classFilterEl = document.getElementById("classFilter");
+    const newNameEl = document.getElementById("newName");
+    const newClassEl = document.getElementById("newClass");
+    const createBtn = document.getElementById("createBtn");
+    const addQuickBtn = document.getElementById("addQuick");
+    const minusQuickBtn = document.getElementById("minusQuick");
+    const perCouponEl = document.getElementById("perCoupon");
+    const lowOnlyEl = document.getElementById("lowOnly");
+    const countMembersEl = document.getElementById("countMembers");
+    const countTotalEl = document.getElementById("countTotal");
+    const exportBtn = document.getElementById("exportBtn");
+    const importFileEl = document.getElementById("importFile");
+    const statsBtn = document.getElementById("statsBtn");
+    const statsModal = document.getElementById("statsModal");
+    const statsClose = document.getElementById("statsClose");
+
+    const sMembers = document.getElementById("sMembers");
+    const sTotal   = document.getElementById("sTotal");
+    const sAvg     = document.getElementById("sAvg");
+    const sLow     = document.getElementById("sLow");
+    const sZero    = document.getElementById("sZero");
+    const sAllergy = document.getElementById("sAllergy");
+    const sClasses = document.getElementById("sClasses");
+
+    perCouponEl.value = settings.perCoupon;
+
+    /* -------------------------------------
+       Build class list
+    --------------------------------------*/
+    function rebuildClassList(){
+      const selected = classFilterEl.value;
+      const classes = new Set();
+      db.members.forEach(m=>{ if(m.class.trim()) classes.add(m.class.trim()); });
+      classFilterEl.innerHTML =
+        `<option value="">Alla klasser</option>` +
+        [...classes].sort((a,b)=>a.localeCompare(b,'sv')).map(c =>
+          `<option ${selected===c?'selected':''} value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+        ).join("");
+    }
+
+    /* -------------------------------------
+       Render
+    --------------------------------------*/
+    function render(){
+      rebuildClassList();
+
+      const q = searchEl.value.toLowerCase().trim();
+      const classFilter = classFilterEl.value;
+      const lowOnly = lowOnlyEl.checked;
+
+      const matches = db.members
+        .filter(m=>{
+          const hit = m.name.toLowerCase().includes(q) || (m.class||"").toLowerCase().includes(q);
+          const low = m.balance <= 2;
+          const classOk = !classFilter || m.class === classFilter;
+          return hit && (!lowOnly || low) && classOk;
+        })
+        .sort((a,b)=>a.name.localeCompare(b.name,'sv'));
+
+      membersEl.innerHTML = "";
+
+      matches.forEach(m=>{
+        const allergyBadge = hasAllergy(m.comment)
+          ? `<span class="badge badge-red">Allergi</span>` : "";
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <div class="title">
+            <div>
+              <div class="name">${escapeHtml(m.name)}</div>
+              <div class="meta">${m.class ? "Klass: "+escapeHtml(m.class) : ""}</div>
+              <div class="meta">${m.comment ? "Allergi/kommentar: "+escapeHtml(m.comment) : ""}</div>
+              <div class="badges">${allergyBadge}</div>
+            </div>
+            <div class="balance ${m.balance===0?'zero':(m.balance<=2?'low':'')}">${m.balance}</div>
+          </div>
+          <div class="btnbar">
+            <button class="warn" data-act="minus" data-id="${m.id}">−1</button>
+            <button class="success" data-act="plus" data-id="${m.id}">+${settings.perCoupon}</button>
+            <button class="ghost" data-act="comment" data-id="${m.id}">Kommentar</button>
+            <button class="ghost" data-act="undo" data-id="${m.id}">Ångra</button>
+            <button class="danger" data-act="delete" data-id="${m.id}">Ta bort</button>
+          </div>
+        `;
+        membersEl.appendChild(card);
+      });
+
+      countMembersEl.textContent = db.members.length;
+      countTotalEl.textContent   = db.members.reduce((s,m)=>s+m.balance,0);
+
+      membersEl.querySelectorAll("button[data-act]").forEach(btn=>{
+        btn.onclick = ()=>{
+          const id = btn.dataset.id;
+          const act = btn.dataset.act;
+          if(act==="minus"){ changeBalance(id,-1); render(); }
+          if(act==="plus"){ changeBalance(id,settings.perCoupon); render(); }
+          if(act==="undo"){ undoLast(id); render(); }
+          if(act==="delete"){
+            if(confirm("Ta bort medlem?")){ removeMember(id); render(); }
+          }
+          if(act==="comment"){
+            const m = db.members.find(x=>x.id===id);
+            const res = prompt("Kommentar / allergi:", m.comment || "");
+            if(res!==null){
+              m.comment = res.trim();
+              saveJSON(KEY_DB,db);
+              render();
+            }
+          }
+        }
+      });
+
+      // Snabbdrag (ingen fokus → inget tangentbord)
+      const exact = db.members.filter(m=>m.name.toLowerCase().includes(q));
+      if(exact.length===1){
+        minusQuickBtn.disabled=false;
+        minusQuickBtn.onclick=()=>{ changeBalance(exact[0].id,-1); render(); };
+      } else {
+        minusQuickBtn.disabled=true;
+        minusQuickBtn.onclick=null;
       }
-      if(act==='comment'){
-        const m = db.members.find(x=>x.id===id);
-        if(!m) return;
-        const text = prompt("Kommentar / allergi:", m.comment || "");
-        if(text !== null){
-          m.comment = text.trim();
-          saveJSON(KEY_DB, db);
+    }
+
+    /* -------------------------------------
+       Statistik
+    --------------------------------------*/
+    function openStats(){
+      const members = db.members;
+      const total = members.reduce((s,m)=>s+m.balance,0);
+      const avg = members.length ? total/members.length : 0;
+
+      sMembers.textContent = members.length;
+      sTotal.textContent = total;
+      sAvg.textContent = avg.toFixed(1).replace('.',',');
+      sLow.textContent = members.filter(m=>m.balance<=2 && m.balance>0).length;
+      sZero.textContent = members.filter(m=>m.balance===0).length;
+      sAllergy.textContent = members.filter(m=>hasAllergy(m.comment)).length;
+
+      const classMap = new Map();
+      members.forEach(m=>{
+        const c = m.class || "—";
+        classMap.set(c,(classMap.get(c)||0)+1);
+      });
+
+      sClasses.innerHTML = [...classMap.entries()]
+        .sort((a,b)=>a[0].localeCompare(b[0],'sv'))
+        .map(([klass,n])=>`<span class="badge">${escapeHtml(klass)}: ${n}</span>`)
+        .join(" ");
+
+      statsModal.classList.add("open");
+    }
+
+    function closeStats(){
+      statsModal.classList.remove("open");
+    }
+
+    /* -------------------------------------
+       Event Listeners
+    --------------------------------------*/
+    searchEl.oninput = render;
+    searchEl.onkeydown = (e)=>{
+      if(e.key==="Enter"){
+        const q = searchEl.value.toLowerCase();
+        const hits = db.members.filter(m=>m.name.toLowerCase().includes(q));
+        if(hits.length===1){
+          changeBalance(hits[0].id,-1);
           render();
         }
       }
-    });
-  });
-}
+    };
 
-/* -------------------------------------
-   Events
---------------------------------------*/
-searchEl.addEventListener('input', render);
+    classFilterEl.onchange = render;
 
-searchEl.addEventListener('keydown', (e)=>{
-  if(e.key==='Enter'){
-    const q = searchEl.value.toLowerCase().trim();
-    const hits = db.members.filter(m => m.name.toLowerCase().includes(q));
-    if(hits.length === 1){
-      changeBalance(hits[0].id, -1);
+    newNameEl.onkeydown = e=>{
+      if(e.key==="Enter") createBtn.click();
+    };
+
+    createBtn.onclick = ()=>{
+      if(!newNameEl.value.trim()) return;
+      const m = addMember(newNameEl.value,newClassEl.value);
+      newNameEl.value="";
+      newClassEl.value="";
       render();
-    }
-  }
-});
+    };
 
-newNameEl.addEventListener('keydown', e=>{
-  if(e.key==='Enter') createBtn.click();
-});
-createBtn.addEventListener('click', ()=>{
-  if(!newNameEl.value.trim()) return;
-  const m = addMember(newNameEl.value, newClassEl.value);
-  newNameEl.value = '';
-  newClassEl.value = '';
-  render();
-});
+    addQuickBtn.onclick=()=>{
+      const name = prompt("Namn på ny medlem:"); if(!name) return;
+      const klass = prompt("Klass (valfritt):") || "";
+      addMember(name,klass);
+      render();
+    };
 
-addQuickBtn.addEventListener('click', ()=>{
-  const name = prompt("Namn på ny medlem:"); if(!name) return;
-  const klass = prompt("Klass (valfritt):") || "";
-  addMember(name, klass);
-  render();
-});
+    perCouponEl.onchange=()=>{
+      const v = Math.max(1,Number(perCouponEl.value)||12);
+      settings.perCoupon=v;
+      saveJSON(KEY_SETTINGS,settings);
+      render();
+    };
 
-perCouponEl.addEventListener('change', ()=>{
-  const val = Math.max(1, Number(perCouponEl.value)||12);
-  settings.perCoupon = val;
-  saveJSON(KEY_SETTINGS, settings);
-  render();
-});
+    lowOnlyEl.onchange= render;
 
-lowOnlyEl.addEventListener('change', render);
+    exportBtn.onclick=()=>{
+      const payload = { exportedAt:new Date().toISOString(),settings,db };
+      const blob = new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download="mellis-backup.json"; a.click();
+      URL.revokeObjectURL(url);
+    };
 
-exportBtn.addEventListener('click', ()=>{
-  const payload = { exportedAt: new Date().toISOString(), settings, db };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'mellis-backup.json'; a.click();
-  URL.revokeObjectURL(url);
-});
+    importFileEl.onchange=async e=>{
+      const file=e.target.files[0]; if(!file) return;
+      try{
+        const text=await file.text();
+        const json=JSON.parse(text);
+        if(json.db && Array.isArray(json.db.members)){
+          if(confirm("Importera data? Detta ersätter nuvarande.")){
+            db=json.db;
+            settings={...settings,...json.settings};
+            saveJSON(KEY_DB,db);
+            saveJSON(KEY_SETTINGS,settings);
+            render();
+          }
+        }
+      } catch{ alert("Fel vid import."); }
+      e.target.value="";
+    };
 
-importFileEl.addEventListener('change', async e=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  try{
-    const text = await file.text();
-    const json = JSON.parse(text);
-    if(json.db && Array.isArray(json.db.members)){
-      if(confirm("Importera data? Detta ersätter nuvarande.")){
-        db = json.db;
-        settings = {...settings, ...json.settings};
-        saveJSON(KEY_DB, db);
-        saveJSON(KEY_SETTINGS, settings);
-        render();
-      }
-    }
-  } catch(err){ alert("Fel vid import."); }
-  e.target.value = "";
-});
+    statsBtn.onclick=openStats;
+    statsClose.onclick=closeStats;
+    statsModal.onclick=(e)=>{ if(e.target===statsModal) closeStats(); };
 
-/* -------------------------------------
-   Init
---------------------------------------*/
-render();
+    /* -------------------------------------
+       Init
+    --------------------------------------*/
+    render();
 
-</script>
+  </script>
 </body>
 </html>
